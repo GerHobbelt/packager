@@ -69,9 +69,14 @@ Class Packager {
 			$descriptor = array();
 
 			// get contents of first comment
-			preg_match('/\/\*\s*^---(.*?)^\.\.\.\s*\*\//ms', $source, $matches);
+			preg_match('/\s*\/\*\s*(.*?)\s*\*\//s', $source, $matches);
 
-			if (!empty($matches)) $descriptor = YAML::decode($matches[0]);
+			if (!empty($matches)){
+				// get contents of YAML front matter
+				preg_match('/^-{3}\s*$(.*?)^(?:-{3}|\.{3})\s*$/ms', $matches[1], $matches);
+
+				if (!empty($matches)) $descriptor = YAML::decode($matches[1]);
+			}
 
 			// populate / convert to array requires and provides
 			$requires = (array)(!empty($descriptor['requires']) ? $descriptor['requires'] : array());
@@ -113,7 +118,9 @@ Class Packager {
 		$length = count($exploded);
 		if ($length == 1) return array($default, $exploded[0]);
 		if (empty($exploded[0])) return array($default, $exploded[1]);
-		return array($exploded[0], $exploded[1]);
+		$package = explode(':', $exploded[0]);
+		//if (!empty($package[1])) $version = $package[1];
+		return array($package[0], $exploded[1]);
 	}
 	
 	private function replace_build($package_path, $file){
@@ -121,7 +128,9 @@ Class Packager {
 		if (empty($ref)) return $file;
 		
 		preg_match("@ref: ([\w\./-]+)@", $ref, $matches);
-		$ref = file_get_contents($package_path . ".git/" . $matches[1]);
+		if (!empty($matches)) $ref = @file_get_contents($package_path . ".git/" . $matches[1]);
+		if (empty($ref)) return $file;
+
 		preg_match("@([\w\./-]+)@", $ref, $matches);
 		return str_replace("%build%", $matches[1], $file);
 	}
