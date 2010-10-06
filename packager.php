@@ -46,7 +46,10 @@ Class Packager {
 		if ($manifest_format == 'json') $manifest = json_decode(file_get_contents($manifest_path), true);
 		else if ($manifest_format == 'yaml' || $manifest_format == 'yml') $manifest = YAML::decode_file($manifest_path);
 		
-		if (empty($manifest)) throw new Exception("manifest not found in $package_path, or unable to parse manifest.");
+		if (empty($manifest)){
+		  self::warn("No package.yml file found at: $path\n");
+		  exit(1);
+		}
 
 		$package_name = $manifest['name'];
 		
