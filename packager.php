@@ -216,9 +216,7 @@ Class Packager {
 			$more = $this->get_all_files($package);
 			foreach ($more as $file) array_include($files, $file);	
 		}
-		
-		$files = $this->complete_files($files);
-		
+
 		if (empty($files)) return '';
 		
 		$included_sources = array();
