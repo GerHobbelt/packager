@@ -88,6 +88,8 @@ switch ($command){
 			'add-packages' => array(),
 			'remove-packages' => array(),
 			'remove-components' => array(),
+			'remove-files' => array(),
+			'remove-files-and-deps' => array(),
 			'blocks' => array(),
 			'use-only' => null
 		);
@@ -126,6 +128,16 @@ switch ($command){
 				continue;
 			}
 
+			if ($arg == '-files'){
+				$build = 'remove-files';
+				continue;
+			}
+			
+			if ($arg == '-files+deps'){
+				$build = 'remove-files-and-deps';
+				continue;
+			}
+			
 			if ($arg == '+files'){
 				$build = 'files';
 				continue;
@@ -150,6 +162,8 @@ switch ($command){
 		
 		$files = $selected['files'];
 		$components = $selected['components'];
+		$remove_files = $selected['remove-files'];
+		$remove_files_and_deps = $selected['remove-files-and-deps'];
 		$blocks = $selected['blocks'];
 		
 		foreach ($components as $component){
@@ -179,7 +193,7 @@ switch ($command){
 			$all = $pkg->get_all_files($package);
 			foreach ($all as $file) array_include($files, $file);
 		}
-		
+
 		$files = $pkg->complete_files($files);
 
 		foreach ($selected['remove-components'] as $component){
@@ -187,6 +201,15 @@ switch ($command){
 			array_erase($files, $file);
 		}
 
+		foreach($remove_files as $remove_file){
+		  array_erase($files, $remove_file);
+		}
+		
+		$remove_files_and_deps = $pkg->complete_files($remove_files_and_deps);
+		foreach($remove_files_and_deps as $remove_file_and_deps){
+		  array_erase($files, $remove_file_and_deps);
+		}
+		
 		Packager::warn("Build using: " . implode(', ', $pkg->get_packages()) . "\n");
 		
 		Packager::warn("Included Files/Components:\n");

@@ -61,6 +61,8 @@ Class Packager {
 		
 		$this->manifests[$package_name] = $manifest;
 		
+		if (count($manifest['sources']) == 0) $manifest['sources'] = array();
+		
 		foreach ($manifest['sources'] as $i => $path){
 			
 			$path = $package_path . $path;
