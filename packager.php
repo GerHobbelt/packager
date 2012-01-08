@@ -226,8 +226,8 @@ Class Packager {
 		return (strpos($matches[2], ($matches[1] == "//") ? "\n" : "*/") === false) ? $matches[2] : "";
 	}
 	
-	public function build_from_files($files){
-		return $this->build($files);
+	public function build_from_files($files, $components = array(), $packages = array(), $blocks = array()){
+		return $this->build($files, $components, $packages, $blocks);
 	}
 	
 	public function build_from_components($components){
