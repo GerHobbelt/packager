@@ -5,8 +5,19 @@ build arguments:
   <components>
   +components <components>     Build passed in components and their
                                dependancies using your registered packages.
+  -components <components>     Don't use passed in components and their
+                               dependancies using your registered packages.
+                               Note that dependencies which are shared
+                               with '+components' components, are kept.
   +files <files>               Build passed in files and their dependancies
                                using your registered packages.
+  -files <files>               Exclude these files from the build.
+  -files+deps <files>          Exclude these files and their dependencies
+                               from the build.
+                               Note that any dependencies of these files
+                               are always excluded, even when other files
+                               list them too; this contrasts with the
+                               dependencies of '-components'.
   +packages <dirs>|<manifests> Use the passed in unregistered packages
                                in addition to the registered packages.
   -packages <packages>         Don't use passed in packages. This lets you
