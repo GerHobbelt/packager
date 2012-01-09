@@ -255,7 +255,7 @@ class Packager {
 		
 		foreach ($packages as $package){
 			$more = $this->get_all_files($package);
-			foreach ($more as $file) array_include($files, $file);	
+			foreach ($more as $file) array_include($files, $file);
 		}
 		
 		if (is_array($excluded)){
@@ -306,7 +306,7 @@ class Packager {
 		
 		$source = implode($included_sources, "\n\n");
 		
-		return $this->remove_blocks($source, $blocks);
+		return $this->wrap_all($this->remove_blocks($source, $blocks));
 	}
 
 	public function remove_blocks($source, $blocks){
@@ -314,7 +314,7 @@ class Packager {
 			$source = preg_replace_callback("%(/[/*])\s*<$block>(.*?)</$block>(?:\s*\*/)?%s", array($this, "block_replacement"), $source);
 		}
 		
-		return $this->wrap_all($source);
+		return $source;
 	}
 
 	private function block_replacement($matches){
