@@ -11,11 +11,18 @@ class Packager {
 		fclose($std_err);
 	}
 
+	public static function info($message){
+		$std_out = fopen('php://stdout', 'w');
+		fwrite($std_out, $message);
+		fclose($std_out);
+	}
+
 	private $packages  = array();
 	private $manifests = array();
 	private $root      = null;
 	private $overall   = null;
-	
+	private $files     = array();
+
 	public function __construct($package_paths){
 		foreach ((array)$package_paths as $package_path) $this->parse_manifest($package_path);
 	}
@@ -66,8 +73,11 @@ class Packager {
 			$manifest['sources'] = $this->bfglob($package_path, $manifest['sources'], 0, 5);
 			$patternUsed = true;
  		}
+		else {
+			$patternUsed = false;
+		}
 
-		if ( !empty($manifest['overall']) ) $this->overall = $package_path . $manifest['overall'];
+		if (!empty($manifest['overall'])) $this->overall = $package_path . $manifest['overall'];
 
 		foreach ($manifest['sources'] as $i => $path){
 
@@ -76,7 +86,12 @@ class Packager {
 				continue;
 			}
 
-			if (!isset($patternUsed)) $path = $package_path . $path;
+			// thomasd: if the source-node contains a description we cache it, but we wait if there's also a description-header in the file as this one takes precedence
+			if (is_array($path)){
+				$source_desc = $path[1];
+				$path = $path[0];
+			}
+			if (!$patternUsed) $path = $package_path . $path;
 			
 			// this is where we "hook" for possible other replacers.
 			$source = file_get_contents($path);
@@ -84,9 +99,15 @@ class Packager {
 			$descriptor = array();
 
 			// get contents of first comment
-			preg_match('/\/\*\s*^---(.*?)^\.\.\.\s*\*\//ms', $source, $matches);
+			preg_match('/\/\*\s*^---(.*?)^(?:\.\.\.|---)\s*\*\//ms', $source, $matches);
 
-			if (!empty($matches)) $descriptor = YAML::decode($matches[0]);
+			if (!empty($matches)){
+				$descriptor = YAML::decode($matches[0]);
+			}
+			// thomasd: if the file doesn't contain a proper description-header but the manifest does, we take that description 
+			else if (isset($source_desc) && is_array($source_desc)){
+				$descriptor = $source_desc;
+			}
 
 			// populate / convert to array requires and provides
 			$requires = (array)(!empty($descriptor['requires']) ? $descriptor['requires'] : array());
@@ -100,6 +121,7 @@ class Packager {
 			$license = array_get($descriptor, 'license');
 			
 			$this->packages[$package_name][$file_name] = array_merge($descriptor, array(
+				'name' => $file_name,
 				'package' => $package_name,
 				'requires' => $requires,
 				'provides' => $provides,
@@ -193,9 +215,9 @@ class Packager {
 	}
 
 	public function wrap_all ($code) {
-		if (!$this->overall) return $code;
+		if (!$this->overall) return $code . "\n";
 		
-		return str_replace('/*** [Code] ***/', $code, file_get_contents( $this->overall ));
+		return str_replace('/*** [Code] ***/', $code, file_get_contents($this->overall));
 	}
 	
 	public function validate($more_files = array(), $more_components = array(), $more_packages = array()){
@@ -223,10 +245,8 @@ class Packager {
 			if (!$this->package_exists($package)) self::warn("WARNING: The required package $package could not be found.\n");
 		}
 	}
-	
-	// # public BUILD
-	
-	public function build($files = array(), $components = array(), $packages = array(), $blocks = array()){
+
+	public function resolve_files($files = array(), $components = array(), $packages = array(), $blocks = array(), $excluded = array()){
 
 		if (!empty($components)){
 			$more = $this->components_to_files($components);
@@ -238,7 +258,46 @@ class Packager {
 			foreach ($more as $file) array_include($files, $file);	
 		}
 		
+		if (is_array($excluded)){
+			if (isset($excluded['components'])){
+				$less = array();
+				foreach ($this->components_to_files($excluded['components']) as $file) array_include($less, $file);
+				$exclude = $this->complete_files($less);
+				$files = array_diff($files, $exclude);
+			}
+		}
+		
+		/*
+		  As the components-to-remove may remove dependencies which are also required by files/components
+		  which are still in the list, we first need to remove those components-to-remove and only then
+		  'complete' the fileset with listed dependencies as they exist in the remaining set.
+		  
+		  Meanwhile the 'files' and 'files_and_deps' remove sets are meant as more of a brute-force
+		  apparatus where those take precedence over the 'real' dependencies, i.e. those two allow
+		  you to discard a dependency file which is listed in the $files[] set!
+		*/
+		
 		$files = $this->complete_files($files);
+		
+		if (is_array($excluded)){
+			if (isset($excluded['files'])){
+				foreach ($excluded['files'] as $file) array_erase($files, $file);
+			}
+			
+			if (isset($excluded['files_and_deps'])){
+				$less = $this->complete_files($excluded['files_and_deps']);
+				foreach ($less as $file) array_erase($files, $file);
+			}
+		}
+
+		return $files;
+	}
+
+	// # public BUILD
+
+	public function build($files = array(), $components = array(), $packages = array(), $blocks = array(), $excluded = null){
+
+		$files = $this->resolve_files($files, $components, $packages, $blocks, $excluded);
 		
 		if (empty($files)) return '';
 		
@@ -247,13 +306,17 @@ class Packager {
 		
 		$source = implode($included_sources, "\n\n");
 		
+		return $this->remove_blocks($source, $blocks);
+	}
+
+	public function remove_blocks($source, $blocks){
 		foreach ($blocks as $block){
 			$source = preg_replace_callback("%(/[/*])\s*<$block>(.*?)</$block>(?:\s*\*/)?%s", array($this, "block_replacement"), $source);
 		}
 		
 		return $this->wrap_all($source);
 	}
-	
+
 	private function block_replacement($matches){
 		return (strpos($matches[2], ($matches[1] == "//") ? "\n" : "*/") === false) ? $matches[2] : "";
 	}
@@ -262,8 +325,8 @@ class Packager {
 		return $this->build($files, $components, $packages, $blocks);
 	}
 	
-	public function build_from_components($components){
-		return $this->build(array(), $components);
+	public function build_from_components($components, $excluded = null){
+		return $this->build(array(), $components, array(), array(), $excluded);
 	}
 
 	public function write_from_files($file_name, $files = null){
@@ -271,8 +334,8 @@ class Packager {
 		file_put_contents($file_name, $full);
 	}
 
-	public function write_from_components($file_name, $components = null){
-		$full = $this->build_from_components($components);
+	public function write_from_components($file_name, $components = null, $excluded = null){
+		$full = $this->build_from_components($components, $excluded);
 		file_put_contents($file_name, $full);
 	}
 	
@@ -287,15 +350,29 @@ class Packager {
 		}
 		return $files;
 	}
-	
+
 	public function get_file_dependancies($file){
-		$hash = $this->file_to_hash($file);
-		if (empty($hash)) return array();
-		return $this->complete_files($this->components_to_files($hash['requires']));
+		$this->files = array();
+		$deps = $this->parse_file_dependancies($file);
+		return $deps;
 	}
-	
+
+	private function parse_file_dependancies($file){
+		$deps = array();
+		$hash = $this->file_to_hash($file);
+
+		if (empty($hash)) return array();
+		if (!in_array($file, $this->files)) {
+			$this->files[] = $file;
+			$files = $this->components_to_files($hash['requires']);
+			$files = array_diff($files, $this->files);
+			$deps = $this->complete_files($files);
+		}
+		return $deps;
+	}
+
 	public function complete_file($file){
-		$files = $this->get_file_dependancies($file);
+		$files = $this->parse_file_dependancies($file);
 		$hash = $this->file_to_hash($file);
 		if (empty($hash)) return array();
 		array_include($files, $hash['package/name']);
@@ -346,7 +423,7 @@ class Packager {
 		
 		return null;
 	}
-	
+
 	public function get_packages(){
 		return array_keys($this->packages);
 	}
@@ -373,5 +450,4 @@ class Packager {
 		if (empty($use)) return array();
 		return array($use);
 	}
-	
 }
