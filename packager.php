@@ -91,6 +91,9 @@ class Packager {
 				$source_desc = $path[1];
 				$path = $path[0];
 			}
+			else {
+				$source_desc = null;
+			}
 			if (!$patternUsed) $path = $package_path . $path;
 			
 			// this is where we "hook" for possible other replacers.
@@ -146,7 +149,7 @@ class Packager {
 	// # private UTILITIES
 	
 	private function parse_name($default, $name){
-		$exploded = explode('/', $name);
+		$exploded = explode('/', $name, 2);
 		$length = count($exploded);
 		if ($length == 1) return array($default, $exploded[0]);
 		if (empty($exploded[0])) return array($default, $exploded[1]);
