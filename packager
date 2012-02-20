@@ -12,9 +12,9 @@ if ($a0 == '-h' || $a0 == '--help'){
 	exit;
 }
 
-$home = exec('echo $HOME');
+$wd = realpath(dirname(__FILE__));
 
-$packages = YAML::decode_file("$home/.packages.yml");
+$packages = YAML::decode_file("$wd/.packages.yml");
 if (empty($packages)) $packages = array();
 
 switch ($command){
@@ -35,7 +35,7 @@ switch ($command){
 		
 		$packages[$name] = $path;
 		
-		file_put_contents("$home/.packages.yml", YAML::encode($packages));
+		file_put_contents("$wd/.packages.yml", YAML::encode($packages));
 		
 		Packager::warn("the package $name has been registered as $path\n");
 
@@ -52,7 +52,7 @@ switch ($command){
 
 		unset($packages[$name]);
 	
-		file_put_contents("$home/.packages.yml", YAML::encode($packages));
+		file_put_contents("$wd/.packages.yml", YAML::encode($packages));
 	
 		Packager::warn("the package $name has been unregistered\n");
 	
@@ -208,5 +208,3 @@ function usage($command = ''){
 	if (empty($command) || !file_exists("$dir/help/$command.txt")) $command = 'default';
 	echo file_get_contents("$dir/help/$command.txt");
 }
-
-?>
