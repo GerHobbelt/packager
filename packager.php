@@ -17,6 +17,10 @@ class Packager {
 		fclose($std_out);
 	}
 
+	public function show_warning($message){
+		self::warn($message);
+	}
+	
 	private $packages  = array();
 	private $manifests = array();
 	private $root      = null;
@@ -230,26 +234,26 @@ class Packager {
 				$file_requires = $file['requires'];
 				foreach ($file_requires as $component){
 					if (!$this->component_exists($component)){
-						self::warn("WARNING: The component $component, required in the file " . $file['package/name'] . ", has not been provided.\n");
+						show_warning("WARNING: The component $component, required in the file " . $file['package/name'] . ", has not been provided.\n");
 					}
 				}
 			}
 		}
 		
 		foreach ($more_files as $file){
-			if (!$this->file_exists($file)) self::warn("WARNING: The required file $file could not be found.\n");
+			if (!$this->file_exists($file)) show_warning("WARNING: The required file $file could not be found.\n");
 		}
 		
 		foreach ($more_components as $component){
-			if (!$this->component_exists($component)) self::warn("WARNING: The required component $component could not be found.\n");
+			if (!$this->component_exists($component)) show_warning("WARNING: The required component $component could not be found.\n");
 		}
 		
 		foreach ($more_packages as $package){
-			if (!$this->package_exists($package)) self::warn("WARNING: The required package $package could not be found.\n");
+			if (!$this->package_exists($package)) show_warning("WARNING: The required package $package could not be found.\n");
 		}
 	}
 
-	public function resolve_files($files = array(), $components = array(), $packages = array(), $blocks = array(), $excluded = array()){
+	public function resolve_files($files = array(), $components = array(), $packages = array(), $excluded = array()){
 
 		if (!empty($components)){
 			$more = $this->components_to_files($components);
@@ -300,7 +304,7 @@ class Packager {
 
 	public function build($files = array(), $components = array(), $packages = array(), $blocks = array(), $excluded = null){
 
-		$files = $this->resolve_files($files, $components, $packages, $blocks, $excluded);
+		$files = $this->resolve_files($files, $components, $packages, $excluded);
 		
 		if (empty($files)) return '';
 		
