@@ -12,6 +12,8 @@ if ($a0 == '-h' || $a0 == '--help'){
 	exit;
 }
 
+try
+{
 $home = exec('echo '.(strstr(PHP_OS, 'WIN') ? '%UserProfile%': '$HOME'));
 if ($home == '$HOME') $home = array_get($_SERVER, 'USERPROFILE');
 
@@ -26,8 +28,7 @@ switch ($command){
 		$realpath = realpath($folder);
 		
 		if (!$realpath){
-			Packager::warn("file or directory $folder not found\n");
-			exit(1);
+			throw new Exception("file or directory $folder not found\n");
 		}
 		
 		$pkg = new Packager($realpath);
@@ -38,7 +39,7 @@ switch ($command){
 		
 		file_put_contents("$home/.packages.yml", YAML::encode($packages));
 
-		Packager::info("the package $name has been registered as $path\n");
+		echo "the package $name has been registered as $path\n";
 
 	break;
 	
@@ -47,15 +48,14 @@ switch ($command){
 		$name = array_shift($argv);
 		
 		if (empty($packages[$name])){
-			Packager::warn("there is no package called $name\n");
-			break;
+			throw new Exception("there is no package called $name\n");
 		}
 
 		unset($packages[$name]);
 	
 		file_put_contents("$home/.packages.yml", YAML::encode($packages));
 	
-		Packager::info("the package $name has been unregistered\n");
+		echo "the package $name has been unregistered\n";
 	
 	break;
 	
@@ -64,7 +64,9 @@ switch ($command){
 		$package_name = array_shift($argv);
 	
 		if (empty($package_name)){
-			foreach ($packages as $name => $path) Packager::info("$name: $path\n");
+			foreach ($packages as $name => $path) {
+				echo "$name: $path\n";
+			}
 		} else {
 			if (!empty($packages[$package_name])){
 				$package_path = $packages[$package_name];
@@ -72,10 +74,10 @@ switch ($command){
 				$files = $pkg->get_all_files();
 				foreach ($files as $file){
 					$file_name = $pkg->get_file_name($file);
-					Packager::info("- $file_name: [" . implode(", ", $pkg->get_file_provides($file)) . "]\n");
+					echo "- $file_name: [" . implode(", ", $pkg->get_file_provides($file)) . "]\n";
 				}
 			} else {
-				Packager::warn("The package $package_name has not been found.\n");
+				throw new Exception("The package $package_name has not been found.\n");
 			}
 		}
 		
@@ -184,7 +186,10 @@ switch ($command){
 			}
 		}
 		
-		$pkg->validate($files, $components, $wildcards);
+		$vf = $pkg->validate($files, $components, $wildcards);
+		if (is_array($vf)) {
+			throw new Exception(implode("\n", $vf) . "\n");
+		}
 		
 		$files = $pkg->resolve_files($files, $components, $wildcards, array(), array(
 			'components' => $remove_components,
@@ -192,13 +197,13 @@ switch ($command){
 			'files_and_deps' => $remove_files_and_deps
 		));
 
-		Packager::warn("Build using: " . implode(', ', $pkg->get_packages()) . "\n");
-		Packager::warn("Included Files/Components:\n");
+		write2stderr("Build using: " . implode(', ', $pkg->get_packages()) . "\n");
+		write2stderr("Included Files/Components:\n");
 		
 		foreach ($files as $file){
 			$file_name = $pkg->get_file_name($file);
 			$file_package = $pkg->get_file_package($file);
-			Packager::warn("- $file_package/$file_name: [" . implode(", ", $pkg->get_file_provides($file)) . "]\n");
+			write2stderr("- $file_package/$file_name: [" . implode(", ", $pkg->get_file_provides($file)) . "]\n");
 		}
 		
 		echo $pkg->build($files, array(), array(), $blocks);
@@ -213,14 +218,30 @@ switch ($command){
 	
 	default:
 		usage();
-		exit(1);
-	
+	break;
+}
+}
+catch (Exception $e)
+{
+	write2stderr($e->message);
+	exit(1);
 }
 
 function usage($command = ''){
 	$dir = dirname(__FILE__);
 	if (empty($command) || !file_exists("$dir/help/$command.txt")) $command = 'default';
 	echo file_get_contents("$dir/help/$command.txt");
+}
+
+function write2stderr($message)
+{
+	if (PHP_SAPI === 'cli') {
+		$std_err = fopen('php://stderr', 'w');
+		fwrite($std_err, $message);
+		fclose($std_err);
+	} else {
+		trigger_error($message, E_USER_WARNING);
+	}
 }
 
 ?>

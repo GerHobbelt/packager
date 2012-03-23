@@ -5,24 +5,8 @@ require dirname(__FILE__) . "/helpers/array.php";
 
 class Packager {
 	
-	public static function warn($message){
-		if (PHP_SAPI === 'cli') {
-			$std_err = fopen('php://stderr', 'w');
-			fwrite($std_err, $message);
-			fclose($std_err);
-		} else {
-			trigger_error($message, E_USER_WARNING);
-		}
-	}
-
-	public static function info($message){
-		$std_out = fopen('php://stdout', 'w');
-		fwrite($std_out, $message);
-		fclose($std_out);
-	}
-
-	public function show_warning($message){
-		self::warn($message);
+	protected function failure($message){
+		throw new Exception($message);
 	}
 	
 	private $packages  = array();
@@ -58,13 +42,15 @@ class Packager {
 			$manifest_path = $package_path . $pathinfo['basename'];
 			$manifest_format = $pathinfo['extension'];
 		} else {
-			self::warn('Neither directory nor file "' . $path . '" exist.');
+			$this->failure('Neither directory nor file "' . $path . '" exist.');
 		}
 
 		if ($manifest_format == 'json') $manifest = json_decode(file_get_contents($manifest_path), true);
 		else if ($manifest_format == 'yaml' || $manifest_format == 'yml') $manifest = YAML::decode_file($manifest_path);
 
-		if (empty($manifest)) throw new Exception("manifest not found in $package_path, or unable to parse manifest.");
+		if (empty($manifest)) {
+			$this->failure("manifest not found in $package_path, or unable to parse manifest.");
+		}
 
 		$package_name = $manifest['name'];
 
@@ -72,9 +58,6 @@ class Packager {
 
 		if (array_has($this->manifests, $package_name)) {
 			return;
-		}
-		if (!isset($manifest['sources']) || !is_array($manifest['sources'])) {
-			self::warn('No valuable sources defined in package "'  . $package_name . '"');
 		}
 
 		$manifest['path'] = $package_path;
@@ -90,6 +73,10 @@ class Packager {
 			$patternUsed = false;
 		}
 
+		if (!isset($manifest['sources']) || !is_array($manifest['sources'])) {
+			$this->failure('No valuable sources defined in package "'  . $package_name . '"');
+		}
+		
 		if (!empty($manifest['overall'])) $this->overall = $package_path . $manifest['overall'];
 
 		foreach ($manifest['sources'] as $i => $path){
@@ -111,7 +98,7 @@ class Packager {
 			
 			// this is where we "hook" for possible other replacers.
 			if (!file_exists($path)) {
-				self::warn('Source file "'  . $path . '" for package "'  . $package_name . '" does not exist');
+				$this->failure('Source file "'  . $path . '" for package "'  . $package_name . '" does not exist');
 			}
 			$source = file_get_contents($path);
 
@@ -239,30 +226,34 @@ class Packager {
 		return str_replace('/*** [Code] ***/', $code, file_get_contents($this->overall));
 	}
 	
+	// return FALSE on success or return array of strings listing the validation failures
 	public function validate($more_files = array(), $more_components = array(), $more_packages = array()){
-
+		$rv = array();
+		
 		foreach ($this->packages as $name => $files){
 			foreach ($files as $file){
 				$file_requires = $file['requires'];
 				foreach ($file_requires as $component){
 					if (!$this->component_exists($component)){
-						show_warning("WARNING: The component $component, required in the file " . $file['package/name'] . ", has not been provided.\n");
+						$rv[] = "WARNING: The component $component, required in the file " . $file['package/name'] . ", has not been provided.";
 					}
 				}
 			}
 		}
 
 		foreach ($more_files as $file){
-			if (!$this->file_exists($file)) show_warning("WARNING: The required file $file could not be found.\n");
+			if (!$this->file_exists($file)) $rv[] = "WARNING: The required file $file could not be found.";
 		}
 
 		foreach ($more_components as $component){
-			if (!$this->component_exists($component)) show_warning("WARNING: The required component $component could not be found.\n");
+			if (!$this->component_exists($component)) $rv[] = "WARNING: The required component $component could not be found.";
 		}
 
 		foreach ($more_packages as $package){
-			if (!$this->package_exists($package)) show_warning("WARNING: The required package $package could not be found.\n");
+			if (!$this->package_exists($package)) $rv[] = "WARNING: The required package $package could not be found.";
 		}
+		
+		return (count($rv) ? $rv : false);
 	}
 
 	public function resolve_files($files = array(), $components = array(), $packages = array(), $excluded = array()){
