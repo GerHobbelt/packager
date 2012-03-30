@@ -65,6 +65,10 @@ class Packager {
 
 		$this->manifests[$package_name] = $manifest;
 		
+		if (!isset($manifest['sources']) || !is_array($manifest['sources'])) {
+			$this->failure('No valuable sources defined in package "'  . $package_name . '"');
+		}
+		
 		if (!is_array($manifest['sources'])){
 			$manifest['sources'] = $this->bfglob($package_path, $manifest['sources'], 0, 5);
 			$patternUsed = true;
@@ -73,10 +77,6 @@ class Packager {
 			$patternUsed = false;
 		}
 
-		if (!isset($manifest['sources']) || !is_array($manifest['sources'])) {
-			$this->failure('No valuable sources defined in package "'  . $package_name . '"');
-		}
-		
 		if (!empty($manifest['overall'])) $this->overall = $package_path . $manifest['overall'];
 
 		foreach ($manifest['sources'] as $i => $path){
