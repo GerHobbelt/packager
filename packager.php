@@ -13,6 +13,7 @@ class Packager {
 	private $manifests = array();
 	private $root      = null;
 	private $overall   = null;
+	private $postprocessor = null;
 	private $files     = array();
 
 	public function __construct($package_paths){
@@ -149,6 +150,10 @@ class Packager {
 		unset($this->manifests[$package_name]);
 	}
 
+	public function set_postprocessor($processor_function){
+		$this->postprocessor = $processor_function;
+	}
+	
 	// # private UTILITIES
 
 	private function parse_name($default, $name){
@@ -220,10 +225,40 @@ class Packager {
 		return array_contains($this->get_packages(), $name);
 	}
 
-	public function wrap_all ($code) {
+	public function wrap_all($code) {
 		if (!$this->overall) return $code . "\n";
 		
 		return str_replace('/*** [Code] ***/', $code, file_get_contents($this->overall));
+	}
+	
+	// perform the global postprocess AFTER all sources have been merged.
+	public function global_postprocess($code) {
+		if (empty($this->postprocessor)) {
+			// do nothing to the content, simply keep it as is...
+			return $code; 
+		}
+		$rv = call_user_func($this->postprocessor, $code);
+		return ($rv === false ? $code : $rv);
+	}
+	
+	// perform package-specific postprocess per file.
+	public function individual_postprocess($file, $code) {
+		return $code;
+		
+		// TODO:
+		$filespec = $this->file_to_hash($file);
+		if (array_has($filespec, 'package')) {
+			$package = array_get($this->packages, $filespec['package']);
+			$package['lazyload']['source'] = 'bla!';
+			echo "<hr><pre>\n"; print_r(array(__FILE__, __LINE__, $file, $package));
+		
+			if (!empty($manifest['postprocessor'])) {
+				$this->postprocessor = $manifest['postprocessor'];
+				if (!is_callable($this->postprocessor)) {
+					$this->failure('Package "'  . $package_name . '" requires execution of an undefined postprocessor function "' . strval($this->postprocessor) . '"');
+				}
+			}
+		}
 	}
 	
 	// return FALSE on success or return array of strings listing the validation failures
@@ -312,11 +347,14 @@ class Packager {
 		if (empty($files)) return '';
 		
 		$included_sources = array();
-		foreach ($files as $file) $included_sources[] = $this->get_file_source($file);
+		foreach ($files as $file) {
+			$filespec = $this->file_to_hash($file);
+			$included_sources[] = $this->individual_postprocess($file, $this->get_file_source($file));
+		}
 		
 		$source = implode($included_sources, "\n\n");
 		
-		return $this->wrap_all($this->remove_blocks($source, $blocks));
+		return $this->global_postprocess($this->wrap_all($this->remove_blocks($source, $blocks)));
 	}
 
 	public function remove_blocks($source, $blocks){
